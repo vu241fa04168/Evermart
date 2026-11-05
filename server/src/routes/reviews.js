@@ -9,6 +9,38 @@ import { validateBody } from '../middleware/validate.js'
 
 export const reviewRouter = express.Router({ mergeParams: true })
 
+export async function deleteReviewById(reviewId, user) {
+  const session = await mongoose.startSession()
+  try {
+    let deletedReview
+    await session.withTransaction(async () => {
+      const review = await Review.findById(reviewId).session(session)
+      if (!review) throw new AppError('Review not found', 404, 'NOT_FOUND')
+
+      const isOwner = review.user.toString() === user._id.toString()
+      const isAdmin = user.role === 'admin'
+      if (!isOwner && !isAdmin) throw new AppError('You can only delete your own reviews', 403, 'FORBIDDEN')
+
+      await Review.deleteOne({ _id: review._id }, { session })
+
+      const [aggregate] = await Review.aggregate([
+        { $match: { product: review.product } },
+        { $group: { _id: '$product', rating: { $avg: '$rating' }, reviewCount: { $sum: 1 } } },
+      ]).session(session)
+
+      await Product.updateOne(
+        { _id: review.product },
+        { $set: { rating: aggregate?.rating || 0, reviewCount: aggregate?.reviewCount || 0 } },
+        { session },
+      )
+      deletedReview = review
+    })
+    return deletedReview
+  } finally {
+    await session.endSession()
+  }
+}
+
 reviewRouter.get('/', asyncHandler(async (request, response) => {
   const reviews = await Review.find({ product: request.params.productId }).populate('user', 'name').sort({ createdAt: -1 })
   response.json({ reviews })
@@ -34,4 +66,15 @@ reviewRouter.post('/', requireAuth, validateBody(['rating', 'comment', 'orderId'
   } finally {
     await session.endSession()
   }
+}))
+
+reviewRouter.delete('/:id', requireAuth, asyncHandler(async (request, response) => {
+  await deleteReviewById(request.params.id, request.user)
+  response.status(204).send()
+}))
+
+export const directReviewRouter = express.Router()
+directReviewRouter.delete('/:id', requireAuth, asyncHandler(async (request, response) => {
+  await deleteReviewById(request.params.id, request.user)
+  response.status(204).send()
 }))

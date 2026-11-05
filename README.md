@@ -48,13 +48,15 @@ The project is designed around real application data. Product inventory, custome
 - Protected admin dashboard with real MongoDB statistics
 - Active product count, customer count, order count, and delivered-order revenue
 - Recent orders and low-stock product views
+- Review moderation with transactional rating recalculation
 - Paginated product management
 - Product creation and editing
 - Product image URL management
-- Price, description, stock, category, and active/archive management
+- Price, description, stock, configurable low-stock threshold, category, and active/archive management
 - Category creation, editing, pagination, and safe deletion checks
 - Paginated order management with search and status filters
 - Order detail views with shipping and COD payment status
+- Separate COD payment updates with an explicit Mark as Paid action
 - Valid order-status transitions
 - Inventory-safe order cancellation
 - Paginated customer management
@@ -287,7 +289,7 @@ npm run seed:catalog
 Set-Location ..
 ```
 
-The catalog seed is idempotent and creates or updates 3 categories and 8 products with realistic prices, stock quantities, descriptions, and stable Unsplash image URLs. It creates no customer reviews or fabricated metrics.
+The catalog seed is idempotent and creates or updates 3 categories and 21 products with realistic prices, stock quantities, descriptions, and stable Unsplash image URLs. It creates no customer reviews or fabricated metrics and does not delete unrelated records.
 
 ## Running the Application
 
@@ -525,14 +527,18 @@ Review example:
 
 All admin endpoints require an authenticated user with `role: "admin"`.
 
-| Method | Endpoint            | Query parameters                                     | Purpose                                                                                      |
-| ------ | ------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `GET`  | `/admin/dashboard`  | `lowStock` optional                                  | Return actual product, customer, order, delivered-revenue, recent-order, and low-stock data. |
-| `GET`  | `/admin/products`   | `page`, `limit`, `search`, `category`, `status`      | Paginated product management list. `status` is `active` or `archived`.                       |
-| `GET`  | `/admin/orders`     | `page`, `limit`, `search`, `status`, `paymentStatus` | Paginated order management list.                                                             |
-| `GET`  | `/admin/users`      | `page`, `limit`, `search`                            | Paginated customer list without password fields.                                             |
-| `GET`  | `/admin/users/:id`  | None                                                 | Customer details and order history without password data.                                    |
-| `GET`  | `/admin/categories` | `page`, `limit`                                      | Paginated category management list.                                                          |
+| Method   | Endpoint             | Query parameters                                     | Purpose                                                                                           |
+| -------- | -------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `GET`    | `/admin/dashboard`   | `lowStock` optional                                  | Return actual product, customer, order, delivered-revenue, recent-order, and low-stock data.      |
+| `GET`    | `/admin/products`    | `page`, `limit`, `search`, `category`, `status`      | Paginated product management list. `status` is `active` or `archived`.                            |
+| `GET`    | `/admin/orders`      | `page`, `limit`, `search`, `status`, `paymentStatus` | Paginated order management list. Search supports order ID, customer name/email, and product name. |
+| `GET`    | `/admin/users`       | `page`, `limit`, `search`                            | Paginated customer list without password fields.                                                  |
+| `GET`    | `/admin/users/:id`   | None                                                 | Customer details and order history without password data.                                         |
+| `GET`    | `/admin/categories`  | `page`, `limit`                                      | Paginated category management list.                                                               |
+| `GET`    | `/admin/reviews`     | `page`, `limit`, `search`                            | Paginated review moderation list.                                                                 |
+| `DELETE` | `/admin/reviews/:id` | None                                                 | Delete a review and recalculate the product aggregate transactionally.                            |
+
+COD payment management uses `PATCH /orders/:id/payment` with `{ "paymentStatus": "Paid" }`. Only administrators can mark a COD order as paid. Delivery status does not automatically change payment status.
 
 ## Business Logic
 
@@ -552,6 +558,7 @@ All admin endpoints require an authenticated user with `role: "admin"`.
 - Stock is decremented with an atomic `stock >= quantity` predicate.
 - Concurrent checkout attempts cannot oversell the same inventory.
 - The order stores product name, current price, quantity, total, payment method, statuses, and a shipping address snapshot.
+- Products persist `lowStockThreshold` separately from available `stock`; the dashboard flags products when `stock <= lowStockThreshold`.
 - COD orders start with `orderStatus: "Processing"` and `paymentStatus: "Pending"`.
 - The persistent cart is cleared in the same transaction after order creation.
 - Cancellation is allowed only for processing orders and is also transactional.
@@ -637,11 +644,12 @@ screenshots/
 - Checkout supports cash on delivery only.
 - Stripe, PayPal, and other external payment integrations are not implemented.
 - Deployment and custom-domain hosting configuration are not completed.
-- Product images use external Unsplash URLs rather than an application-managed upload service.
+- Product images use external Unsplash URLs rather than an application-managed upload service. The UI falls back to the Fieldnote favicon when a remote image fails.
 - No email notifications are implemented.
 - No coupons, tax engine, shipping-rate engine, or multi-vendor workflows are implemented.
 - Frontend lint still reports non-blocking React effect dependency warnings.
 - Browser screenshot and automated visual regression coverage are not included in the current test suite.
+- The expanded catalog seed has not been run against production. Review it and run it only against the intended database after backup and verification.
 
 ### Future improvements
 

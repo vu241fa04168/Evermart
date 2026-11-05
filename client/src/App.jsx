@@ -2,7 +2,9 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout.jsx'
 import { useAuth } from './hooks/useAuth.js'
 import { HomePage, CatalogPage, ProductPage, LoginPage, RegisterPage, CartPage, WishlistPage, CheckoutPage, ConfirmationPage, OrdersPage, ProfilePage, PrivacyPage, TermsPage, NotFoundPage } from './pages.jsx'
-import { AdminRouteGuard, AdminDashboardPage, AdminProductsPage, AdminCategoriesPage, AdminOrdersPage, AdminCustomersPage } from './admin-pages.jsx'
+import { AdminRouteGuard, AdminDashboardPage, AdminProductsPage, AdminCategoriesPage, AdminCustomersPage } from './admin-pages.jsx'
+import AdminOrdersPage from './admin-orders.jsx'
+import AdminReviewsPage from './admin-reviews.jsx'
 import './App.css'
 
 function App() {
@@ -28,6 +30,7 @@ function App() {
           <Route path="/admin/categories" element={<AdminRouteGuard><AdminCategoriesPage /></AdminRouteGuard>} />
           <Route path="/admin/orders" element={<AdminRouteGuard><AdminOrdersPage /></AdminRouteGuard>} />
           <Route path="/admin/customers" element={<AdminRouteGuard><AdminCustomersPage /></AdminRouteGuard>} />
+          <Route path="/admin/reviews" element={<AdminRouteGuard><AdminReviewsPage /></AdminRouteGuard>} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

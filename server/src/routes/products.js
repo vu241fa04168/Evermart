@@ -1,4 +1,5 @@
 import express from 'express'
+import mongoose from 'mongoose'
 import { Category } from '../models/Category.js'
 import { Product } from '../models/Product.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
@@ -7,14 +8,32 @@ import { parsePagination, validateBody } from '../middleware/validate.js'
 
 export const productRouter = express.Router()
 
-function productQuery(request) {
+async function productQuery(request) {
   const query = { isActive: true }
   const numericFilters = ['minPrice', 'maxPrice', 'minRating']
   for (const filter of numericFilters) {
     if (request.query[filter] !== undefined && (!Number.isFinite(Number(request.query[filter])) || Number(request.query[filter]) < 0)) throw new AppError(`${filter} must be a non-negative number`, 400, 'VALIDATION_ERROR')
   }
-  if (request.query.search) query.$text = { $search: request.query.search.trim() }
-  if (request.query.category) query.category = request.query.category
+  if (request.query.search) {
+    const search = request.query.search.trim()
+    const categoryMatches = await Category.find({ name: { $regex: search, $options: 'i' } }).select('_id')
+    const searchOr = [
+      { name: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } },
+      { category: { $in: categoryMatches.map((category) => category._id) } },
+    ]
+    if (mongoose.isValidObjectId(search)) searchOr.push({ _id: search })
+    query.$or = searchOr
+  }
+  if (request.query.category) {
+    if (mongoose.isValidObjectId(request.query.category)) {
+      query.category = request.query.category
+    } else {
+      const categoryMatch = await Category.findOne({ slug: request.query.category }).select('_id')
+      if (categoryMatch) query.category = categoryMatch._id
+      else query.category = null
+    }
+  }
   if (request.query.minPrice || request.query.maxPrice) query.price = {}
   if (request.query.minPrice) query.price.$gte = Math.max(Number(request.query.minPrice), 0)
   if (request.query.maxPrice) query.price.$lte = Math.max(Number(request.query.maxPrice), 0)
@@ -32,7 +51,7 @@ function validateImageUrl(image) {
 }
 
 productRouter.get('/', parsePagination, asyncHandler(async (request, response) => {
-  const query = productQuery(request)
+  const query = await productQuery(request)
   const sortMap = { priceAsc: { price: 1 }, priceDesc: { price: -1 }, rating: { rating: -1 }, popularity: { popularity: -1 }, newest: { createdAt: -1 } }
   const sort = sortMap[request.query.sort] || sortMap.newest
   const [products, total] = await Promise.all([
@@ -52,7 +71,18 @@ productRouter.post('/', requireAuth, requireRole('admin'), validateBody(['name',
   const category = await Category.findById(request.body.category)
   if (!category) throw new AppError('Category not found', 400, 'INVALID_CATEGORY')
   if (!validateImageUrl(request.body.image)) throw new AppError('Image must be a valid HTTP or HTTPS URL', 400, 'VALIDATION_ERROR')
-  const product = await Product.create({ name: request.body.name, description: request.body.description, price: Number(request.body.price), category: request.body.category, image: request.body.image, stock: Number(request.body.stock) })
+  const lowStockThreshold = request.body.lowStockThreshold === undefined ? 5 : Number(request.body.lowStockThreshold)
+  if (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0) throw new AppError('lowStockThreshold must be a non-negative integer', 400, 'VALIDATION_ERROR')
+  const product = await Product.create({
+    name: request.body.name,
+    description: request.body.description,
+    price: Number(request.body.price),
+    category: request.body.category,
+    image: request.body.image,
+    stock: Number(request.body.stock),
+    lowStockThreshold,
+    isActive: true,
+  })
   response.status(201).json({ product })
 }))
 
@@ -63,6 +93,12 @@ productRouter.patch('/:id', requireAuth, requireRole('admin'), asyncHandler(asyn
   if (updates.image !== undefined && !validateImageUrl(updates.image)) throw new AppError('Image must be a valid HTTP or HTTPS URL', 400, 'VALIDATION_ERROR')
   if (updates.price !== undefined) updates.price = Number(updates.price)
   if (updates.stock !== undefined) updates.stock = Number(updates.stock)
+  if (updates.lowStockThreshold !== undefined) {
+    updates.lowStockThreshold = Number(updates.lowStockThreshold)
+    if (!Number.isInteger(updates.lowStockThreshold) || updates.lowStockThreshold < 0) {
+      throw new AppError('lowStockThreshold must be a non-negative integer', 400, 'VALIDATION_ERROR')
+    }
+  }
   const product = await Product.findByIdAndUpdate(request.params.id, updates, { new: true, runValidators: true })
   if (!product) throw new AppError('Product not found', 404, 'NOT_FOUND')
   response.json({ product })

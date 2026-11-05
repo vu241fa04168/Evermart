@@ -7,6 +7,7 @@ const productSchema = new mongoose.Schema({
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true, index: true },
   image: { type: String, required: true, trim: true, maxlength: 1000 },
   stock: { type: Number, required: true, min: 0, validate: Number.isInteger },
+  lowStockThreshold: { type: Number, min: 0, max: 100000, default: 5, validate: Number.isInteger },
   rating: { type: Number, min: 0, max: 5, default: 0 },
   reviewCount: { type: Number, min: 0, default: 0 },
   popularity: { type: Number, min: 0, default: 0 },

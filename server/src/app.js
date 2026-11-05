@@ -11,7 +11,7 @@ import { productRouter } from './routes/products.js'
 import { cartRouter } from './routes/cart.js'
 import { wishlistRouter } from './routes/wishlist.js'
 import { orderRouter } from './routes/orders.js'
-import { reviewRouter } from './routes/reviews.js'
+import { reviewRouter, directReviewRouter } from './routes/reviews.js'
 import { adminRouter } from './routes/admin.js'
 import { errorHandler } from './middleware/error.js'
 
@@ -42,6 +42,7 @@ app.use('/api/products', productRouter)
 app.use('/api/cart', cartRouter)
 app.use('/api/wishlist', wishlistRouter)
 app.use('/api/orders', orderRouter)
+app.use('/api/reviews', directReviewRouter)
 app.use('/api/products/:productId/reviews', reviewRouter)
 app.use('/api/admin', adminRouter)
 

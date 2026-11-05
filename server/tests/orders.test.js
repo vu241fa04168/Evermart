@@ -145,6 +145,16 @@ describe('Phase 3 orders and reviews', () => {
     assert.equal(productAfterReview.rating, 5)
     assert.equal(productAfterReview.reviewCount, 1)
     assert.equal(await Review.countDocuments({ product: product._id }), 1)
+
+    // Other customer cannot delete this review
+    await otherAgent.delete(`/api/reviews/${review.body.review._id}`).expect(403)
+
+    // Review owner can delete their own review
+    await agent.delete(`/api/reviews/${review.body.review._id}`).expect(204)
+    const productAfterDelete = await Product.findById(product._id)
+    assert.equal(productAfterDelete.rating, 0)
+    assert.equal(productAfterDelete.reviewCount, 0)
+    assert.equal(await Review.countDocuments({ product: product._id }), 0)
   })
 
   it('prevents concurrent duplicate reviews and rejects reviews on cancelled orders', async () => {

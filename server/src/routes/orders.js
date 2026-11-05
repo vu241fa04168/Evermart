@@ -41,3 +41,10 @@ orderRouter.patch('/:id/status', requireRole('admin'), asyncHandler(async (reque
   if (!order) throw new AppError('Order status changed concurrently; retry the request', 409, 'CONCURRENT_STATUS_UPDATE')
   response.json({ order })
 }))
+
+orderRouter.patch('/:id/payment', requireRole('admin'), asyncHandler(async (request, response) => {
+  if (request.body?.paymentStatus !== 'Paid') throw new AppError('COD payment can only be marked as Paid', 400, 'INVALID_PAYMENT_STATUS')
+  const order = await Order.findOneAndUpdate({ _id: request.params.id, paymentMethod: 'cod', paymentStatus: 'Pending', orderStatus: { $ne: 'Cancelled' } }, { $set: { paymentStatus: 'Paid' } }, { new: true, runValidators: true })
+  if (!order) throw new AppError('COD payment is already paid, cancelled, or the order was not found', 409, 'PAYMENT_UPDATE_NOT_ALLOWED')
+  response.json({ order })
+}))
